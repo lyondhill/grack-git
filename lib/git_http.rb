@@ -3,9 +3,11 @@ require 'rack/request'
 require 'rack/response'
 require 'rack/utils'
 require 'time'
+require 'rest-client'
 
 class GitHttp
   class App 
+    attr_accessor :env
 
     SERVICES = [
       ["POST", 'service_rpc',      "(.*?)/git-upload-pack$",  'upload-pack'],
@@ -282,7 +284,30 @@ class GitHttp
       (str.size + 4).to_s(base=16).rjust(4, '0') + str
     end
 
+    def protected!
+      unless authorized?
+        response['WWW-Authenticate'] = %(Basic realm="Restricted Area")
+        throw(:halt, [401, "Not authorized\n"])
+      end
+    end
 
+    def authorized?
+      @auth ||=  Rack::Auth::Basic::Request.new(@env)
+      if @auth.provided? && @auth.basic? && @auth.credentials
+        begin
+          user, pass = @auth.credentials
+          rest = RestClient::Resource.new('https://dashboard.newpagodabox.com', user, password)
+          account  = rest["apps"]
+          response = app_url.get
+          app      = JSON.load(response.to_s)
+
+        rescue Exception => e
+          false          
+        end
+      else
+        false
+      end
+    end
     # ------------------------
     # header writing functions
     # ------------------------
